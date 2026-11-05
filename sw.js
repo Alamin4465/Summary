@@ -2,7 +2,7 @@
 // sw.js — Service Worker (Offline Support)
 // ============================================
 
-const CACHE_NAME = 'expense-tracker-v3'; // 🆕 ভার্সন আপডেট করা হলো
+const CACHE_NAME = 'expense-tracker-v4'; // 🆕 ভার্সন আপডেট করা হলো
 
 const ASSETS = [
   './',
