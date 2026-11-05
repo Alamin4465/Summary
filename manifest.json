@@ -1,8 +1,8 @@
 {
   "name": "আয়-ব্যয় ব্যবস্থাপনা",
   "short_name": "হিসাব",
-  "start_url": "/Summery/index.html",
-  "scope": "/Summery/",
+  "start_url": "/Summary/index.html",
+  "scope": "/Summary/",
   "display": "standalone",
   "background_color": "#e0eafc",
   "theme_color": "#3b82f6",
