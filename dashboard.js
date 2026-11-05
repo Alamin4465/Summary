@@ -1,12 +1,11 @@
 // ============================================
-// dashboard.js — সম্পূর্ণ (১ নম্বরের মতো হুবহু রঙসহ)
+// dashboard.js — সম্পূর্ণ (অফলাইন ডেটা ফিক্সসহ)
 // ============================================
 
 function loadDashboardSummary() {
   const content = document.getElementById('content');
   if (!content) return;
 
-  // HTML স্ট্রাকচার (ডাবল গ্লাস কার্ড মুক্ত)
   content.innerHTML = `
     <h2 class="titel">ড্যাশবোর্ড</h2>
 
@@ -14,17 +13,17 @@ function loadDashboardSummary() {
       <div class="summary-card income">
         <div class="summary-icon"><i class="fas fa-money-bill-wave"></i></div>
         <h3>মোট আয়</h3>
-        <p><span id="totalIncome">০</span> টাকা</p>
+        <p><span id="totalIncome">লোড হচ্ছে...</span></p>
       </div>
       <div class="summary-card expense">
         <div class="summary-icon"><i class="fas fa-credit-card"></i></div>
         <h3>মোট ব্যয়</h3>
-        <p><span id="totalExpense">০</span> টাকা</p>
+        <p><span id="totalExpense">লোড হচ্ছে...</span></p>
       </div>
       <div class="summary-card balance">
         <div class="summary-icon"><i class="fas fa-wallet"></i></div>
         <h3>বর্তমান ব্যালেন্স</h3>
-        <p><span id="balance">০</span> টাকা</p>
+        <p><span id="balance">লোড হচ্ছে...</span></p>
       </div>
     </div>
 
@@ -70,7 +69,14 @@ function loadDashboardSummary() {
     const userData = userDoc.data() || {};
     const totalTransferredSavings = userData.totalTransferredSavings || 0;
 
-    userRef.collection("transactions").onSnapshot(snapshot => {
+    // 🆕 includeMetadataChanges: true দিলে অফলাইনেও সাথে সাথে ডেটা আসবে
+    userRef.collection("transactions").onSnapshot({ includeMetadataChanges: true }, (snapshot) => {
+      
+      // 🆕 অফলাইনে ক্যাশ খালি থাকলে ০ দেখাবে না, অপেক্ষা করবে
+      if (snapshot.empty && snapshot.metadata.fromCache) {
+        return; 
+      }
+
       let totalIncome = 0;
       let totalExpense = 0;
       let totalSavingsRaw = 0;
@@ -124,6 +130,7 @@ function loadDashboardSummary() {
       const elIncome = document.getElementById("totalIncome");
       const elExpense = document.getElementById("totalExpense");
       const elBalance = document.getElementById("balance");
+      
       if (elIncome)  elIncome.textContent  = toBanglaNumber(totalIncome);
       if (elExpense) elExpense.textContent = toBanglaNumber(totalExpense);
       if (elBalance) elBalance.textContent = toBanglaNumber(balance);
@@ -140,7 +147,7 @@ function loadDashboardSummary() {
 }
 
 // ============================================
-// 🎯 কালার জেনারেটর (দুটি চার্টেই ব্যবহার হবে)
+// 🎯 কালার জেনারেটর
 // ============================================
 function getColor(rate) {
   if (rate <= 5) return "#b71c1c";
@@ -162,7 +169,7 @@ function getColor(rate) {
 }
 
 // ============================================
-// 🆕 ২ নম্বর চার্ট (সেভিংস পুল) - ১ নম্বরের মতো হুবহু
+// 🆕 ২ নম্বর চার্ট (সেভিংস পুল)
 // ============================================
 let savingTrendGaugeInstance = null;
 function drawSavingTrendChart(currentSavings, totalSavingsRaw) {
@@ -177,11 +184,8 @@ function drawSavingTrendChart(currentSavings, totalSavingsRaw) {
     savingTrendGaugeInstance = null;
   }
 
-  // ১০,০০০ টাকাকে ১০০% ধরা হলো (গেজ ভরাট হওয়ার জন্য)
   const maxTarget = 10000; 
   const savingPercent = Math.min((currentSavings / maxTarget) * 100, 100);
-
-  // ১ নম্বর চার্টের মতো কালার ফাংশন কল
   const color = getColor(savingPercent);
 
   const options = {
@@ -191,7 +195,7 @@ function drawSavingTrendChart(currentSavings, totalSavingsRaw) {
       fontFamily: 'SolaimanLipi, sans-serif',
       background: 'transparent'
     },
-    series: [savingPercent], // পার্সেন্টেজ
+    series: [savingPercent], 
     labels: ["সেভিংস পুল"], 
     colors: [color], 
     plotOptions: {
