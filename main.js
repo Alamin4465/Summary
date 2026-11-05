@@ -1,4 +1,12 @@
 // ============================================
+// 🆕 অফলাইনে লগইন সেশন ধরে রাখার জন্য (Auth Persistence)
+// ============================================
+firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL)
+  .catch((error) => {
+    console.error("Auth Persistence error:", error);
+  });
+
+// ============================================
 // Global Variables
 // ============================================
 let currentUser = null;
@@ -62,7 +70,7 @@ function activate(button, sectionName) {
     case 'ড্যাশবোর্ড':
       if (typeof loadDashboardSummary === 'function') loadDashboardSummary();
       break;
-    case 'ফর্মস': // 🆕 spelling fix: 'ফ্রমস' → 'ফর্মস'
+    case 'ফর্মস':
       if (typeof lonefrom === 'function') lonefrom();
       break;
     case 'ফিল্টার':
@@ -124,12 +132,11 @@ function loadSettingsPage() {
     </div>
   `;
 
-  // পেজ লোড হওয়ার সাথে সাথে লিস্ট লোড করা
   loadCategoriesToSelect();
   loadWalletsToSelect();
 }
 
-// ম্যানেজ ট্যাব পরিবর্তন (ক্যাটাগরি / ওয়ালেট) — 🆕 data-tab robust
+// ম্যানেজ ট্যাব পরিবর্তন (ক্যাটাগরি / ওয়ালেট)
 window.switchManageTab = function (tab) {
   const tabBtns = document.querySelectorAll('.manage-tabs .manage-tab-btn[data-tab]');
   tabBtns.forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
@@ -162,7 +169,7 @@ window.setCategoryType = function (type) {
 async function loadCategoriesToSelect() {
   const categoryList = document.getElementById('categoryList');
   if (!categoryList) return;
-  if (!currentUser) return; // 🆕 guard
+  if (!currentUser) return;
 
   categoryList.innerHTML = '<option value="">লোড হচ্ছে...</option>';
 
@@ -179,7 +186,6 @@ async function loadCategoriesToSelect() {
       return;
     }
 
-    // 🆕 sort bangla locale
     snapshot.docs
       .sort((a, b) => (a.data().name || '').localeCompare(b.data().name || '', 'bn-BD'))
       .forEach(doc => {
@@ -204,7 +210,6 @@ async function addNewCategory() {
   if (!name) return alert('ক্যাটাগরির নাম দিন!');
 
   try {
-    // 🆕 duplicate name check
     const existing = await firebase.firestore()
       .collection("users").doc(currentUser.uid)
       .collection("categories")
@@ -271,7 +276,7 @@ async function deleteSelectedCategory() {
 async function loadWalletsToSelect() {
   const walletList = document.getElementById('walletList');
   if (!walletList) return;
-  if (!currentUser) return; // 🆕 guard
+  if (!currentUser) return;
 
   walletList.innerHTML = '<option value="">লোড হচ্ছে...</option>';
 
@@ -311,7 +316,6 @@ async function addNewWallet() {
   if (!name) return alert('ওয়ালেটের নাম দিন!');
 
   try {
-    // 🆕 duplicate name check
     const existing = await firebase.firestore()
       .collection("users").doc(currentUser.uid)
       .collection("wallets")
@@ -383,7 +387,7 @@ async function loadSavingsSettings(uid) {
 
   try {
     const userDoc = await firebase.firestore().collection('users').doc(uid).get();
-    const data = (userDoc.exists && userDoc.data()) || {}; // 🆕 guard
+    const data = (userDoc.exists && userDoc.data()) || {};
     const isSavingsEnabled = data.savingsEnabled !== undefined
       ? data.savingsEnabled
       : true;
@@ -391,8 +395,6 @@ async function loadSavingsSettings(uid) {
     toggle.checked = isSavingsEnabled;
     updateSavingsUI(isSavingsEnabled, uid);
 
-    // 🆕 P1 fix: addEventListener er bodole onchange assignment
-    // (multiple call holeo single listener thakbe)
     toggle.onchange = async (e) => {
       const newStatus = e.target.checked;
       try {
@@ -402,7 +404,6 @@ async function loadSavingsSettings(uid) {
         updateSavingsUI(newStatus, uid);
       } catch (err) {
         console.error("Savings toggle update error:", err);
-        // rollback UI
         toggle.checked = !newStatus;
         alert("সেভিংস সেটিং আপডেটে সমস্যা হয়েছে!");
       }
@@ -445,7 +446,6 @@ async function checkTodaySavingFromTransactions(uid) {
     const todaySnapshot = await transactionsRef.where("category", "==", "সঞ্চয়").where("date", "==", today).get();
     const totalSnapshot = await transactionsRef.where("category", "==", "সঞ্চয়").get();
 
-    // 🆕 P1 fix: unique date count (transaction count na, din count)
     const uniqueDates = new Set();
     totalSnapshot.forEach(doc => {
       const d = doc.data();
@@ -457,13 +457,13 @@ async function checkTodaySavingFromTransactions(uid) {
     if (!statusDiv) return;
 
     const userDoc = await userRef.get();
-    const userData = (userDoc.exists && userDoc.data()) || {}; // 🆕 guard
+    const userData = (userDoc.exists && userDoc.data()) || {};
     const totalTransferred = Number(userData.totalTransferredSavings) || 0;
     const lastTransferredCount = Number(userData.lastTransferredCount) || 0;
 
     let totalSavedAmount = 0;
     totalSnapshot.forEach(doc => {
-      totalSavedAmount += Number(doc.data().amount) || 0; // 🆕 guard
+      totalSavedAmount += Number(doc.data().amount) || 0;
     });
 
     const currentSavingsBalance = totalSavedAmount - totalTransferred;
@@ -503,8 +503,6 @@ async function checkTodaySavingFromTransactions(uid) {
             statusDiv.className = 'success';
             statusDiv.innerHTML = `<div class="scroll-text">✅ সঞ্চয় ওয়ালেটে ট্রান্সফার সম্পন্ন হয়েছে।</div>`;
 
-            // 🆕 P1 fix: shudhu dashboard active thakle load koro
-            // (na hole content overwrite hoye unexpected navigation hobe)
             const activeNav = document.querySelector('.menu-button.active');
             if (activeNav && activeNav.id === 'nav-dashboard' && typeof loadDashboardSummary === 'function') {
               loadDashboardSummary();
