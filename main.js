@@ -1,16 +1,11 @@
 // ============================================
-// 🆕 অফলাইনে লগইন সেশন ধরে রাখার জন্য (Auth Persistence)
+// main.js — সম্পূর্ণ সংশোধিত
 // ============================================
-firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL)
-  .catch((error) => {
-    console.error("Auth Persistence error:", error);
-  });
 
-// ============================================
 // Global Variables
-// ============================================
 let currentUser = null;
-let currentManageType = 'income'; // ক্যাটাগরি ম্যানেজের জন্য ডিফল্ট টাইপ
+let currentManageType = 'income';
+let savingsSettingsLoadedFor = null; // 🔧 flag দিয়ে duplicate load প্রতিরোধ
 
 // ============================================
 // AUTH CHECK & INITIALIZATION
@@ -18,12 +13,26 @@ let currentManageType = 'income'; // ক্যাটাগরি ম্যান
 firebase.auth().onAuthStateChanged(user => {
   if (!user) {
     window.location.href = "login.html";
-  } else {
-    currentUser = user;
-    activate(document.getElementById('nav-dashboard'), 'ড্যাশবোর্ড');
-    showUserName(user);
-    loadSavingsSettings(user.uid);
+    return;
   }
+  currentUser = user;
+
+  // DOM প্রস্তুত হলে dashboard activate
+  const initDashboard = () => {
+    const dashBtn = document.getElementById('nav-dashboard');
+    if (dashBtn && typeof activate === 'function') {
+      activate(dashBtn, 'ড্যাশবোর্ড');
+    }
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initDashboard, { once: true });
+  } else {
+    initDashboard();
+  }
+
+  showUserName(user);
+  loadSavingsSettings(user.uid);
 });
 
 document.addEventListener('DOMContentLoaded', function () {
@@ -37,17 +46,27 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 
   // Navigation Menu Listeners
-  document.getElementById('nav-dashboard')?.addEventListener('click', () => activate(document.getElementById('nav-dashboard'), 'ড্যাশবোর্ড'));
-  document.getElementById('nav-forms')?.addEventListener('click', () => activate(document.getElementById('nav-forms'), 'ফর্মস'));
-  document.getElementById('nav-submit')?.addEventListener('click', () => activate(document.getElementById('nav-submit'), 'ট্রানজেকশন'));
-  document.getElementById('nav-filter')?.addEventListener('click', () => activate(document.getElementById('nav-filter'), 'ফিল্টার'));
-  document.getElementById('nav-settings')?.addEventListener('click', () => activate(document.getElementById('nav-settings'), 'সেটিংস'));
+  const navMap = {
+    'nav-dashboard': 'ড্যাশবোর্ড',
+    'nav-forms': 'ফর্মস',
+    'nav-submit': 'ট্রানজেকশন',
+    'nav-filter': 'ফিল্টার',
+    'nav-settings': 'সেটিংস'
+  };
+  Object.keys(navMap).forEach(id => {
+    const btn = document.getElementById(id);
+    if (btn) {
+      btn.addEventListener('click', function () {
+        activate(this, navMap[id]);
+      });
+    }
+  });
 
   // Profile Click
   document.getElementById('user-name')?.addEventListener('click', () => {
     document.querySelectorAll('.menu-button').forEach(btn => btn.classList.remove('active'));
     const content = document.getElementById('content');
-    if (content) content.innerHTML = `<p>লোড হচ্ছে...</p>`;
+    if (content) content.innerHTML = `<h2 class="titel">প্রোফাইল তথ্য</h2><p>লোড হচ্ছে...</p>`;
     if (typeof loadProfileInfo === 'function') loadProfileInfo();
   });
 });
@@ -61,7 +80,7 @@ function activate(button, sectionName) {
 
   const content = document.getElementById('content');
   if (!content) return;
-  content.innerHTML = `<p>লোড হচ্ছে...</p>`;
+  content.innerHTML = `<h2 class="titel">${sectionName}</h2><p>লোড হচ্ছে...</p>`;
 
   switch (sectionName) {
     case 'প্রোফাইল তথ্য':
@@ -83,12 +102,12 @@ function activate(button, sectionName) {
       loadSettingsPage();
       break;
     default:
-      content.innerHTML = `<p>এই অংশটি এখনো তৈরি হয়নি।</p>`;
+      content.innerHTML = `<h2 class="titel">${sectionName}</h2><p>এই অংশটি এখনো তৈরি হয়নি।</p>`;
   }
 }
 
 // ============================================
-// 🆕 SETTINGS PAGE (Category & Wallet Manage)
+// SETTINGS PAGE
 // ============================================
 function loadSettingsPage() {
   const content = document.getElementById('content');
@@ -105,7 +124,6 @@ function loadSettingsPage() {
         <button class="manage-tab-btn" data-tab="wallet" onclick="switchManageTab('wallet')">ওয়ালেট</button>
       </div>
 
-      <!-- ক্যাটাগরি ম্যানেজ -->
       <div id="manage-category-area">
         <div class="manage-tabs" style="margin-bottom:10px;">
           <button class="manage-tab-btn active" id="btn-cat-income" onclick="setCategoryType('income')">আয়</button>
@@ -119,7 +137,6 @@ function loadSettingsPage() {
         <select id="categoryList" class="form-input" size="5" style="height:auto; margin-top:10px;"></select>
       </div>
 
-      <!-- ওয়ালেট ম্যানেজ -->
       <div id="manage-wallet-area" style="display:none;">
         <input type="text" id="newWalletInput" class="form-input" placeholder="নতুন ওয়ালেটের নাম..." />
         <button id="addWalletBtn" onclick="addNewWallet()">ওয়ালেট যোগ করুন</button>
@@ -136,7 +153,7 @@ function loadSettingsPage() {
   loadWalletsToSelect();
 }
 
-// ম্যানেজ ট্যাব পরিবর্তন (ক্যাটাগরি / ওয়ালেট)
+// ম্যানেজ ট্যাব
 window.switchManageTab = function (tab) {
   const tabBtns = document.querySelectorAll('.manage-tabs .manage-tab-btn[data-tab]');
   tabBtns.forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
@@ -153,7 +170,6 @@ window.switchManageTab = function (tab) {
   }
 };
 
-// ক্যাটাগরি টাইপ পরিবর্তন (আয় / ব্যয়)
 window.setCategoryType = function (type) {
   currentManageType = type;
   const btnIncome = document.getElementById('btn-cat-income');
@@ -379,48 +395,82 @@ async function deleteSelectedWallet() {
 }
 
 // ============================================
-// SAVINGS ON/OFF SETTINGS
+// 🔧 SAVINGS SETTINGS — নিরাপদ সংস্করণ
 // ============================================
 async function loadSavingsSettings(uid) {
   const toggle = document.getElementById('savings-toggle');
   if (!toggle) return;
 
+  // 🔧 একবারই লোড করুন
+  if (savingsSettingsLoadedFor === uid) return;
+  savingsSettingsLoadedFor = uid;
+
+  let isSavingsEnabled = true;
+
   try {
     const userDoc = await firebase.firestore().collection('users').doc(uid).get();
     const data = (userDoc.exists && userDoc.data()) || {};
-    const isSavingsEnabled = data.savingsEnabled !== undefined
-      ? data.savingsEnabled
-      : true;
-
-    toggle.checked = isSavingsEnabled;
-    updateSavingsUI(isSavingsEnabled, uid);
-
-    toggle.onchange = async (e) => {
-      const newStatus = e.target.checked;
-      try {
-        await firebase.firestore().collection('users').doc(uid).update({
-          savingsEnabled: newStatus
-        });
-        updateSavingsUI(newStatus, uid);
-      } catch (err) {
-        console.error("Savings toggle update error:", err);
-        toggle.checked = !newStatus;
-        alert("সেভিংস সেটিং আপডেটে সমস্যা হয়েছে!");
-      }
-    };
-
-  } catch (error) {
-    console.error("Savings settings error:", error);
+    isSavingsEnabled = data.savingsEnabled !== undefined ? data.savingsEnabled : true;
+  } catch (firestoreErr) {
+    console.error('Firestore load error:', {
+      code: firestoreErr?.code,
+      message: firestoreErr?.message,
+      stack: firestoreErr?.stack
+    });
+    // default true রাখুন
   }
+
+  toggle.checked = isSavingsEnabled;
+
+  // 🔧 updateSavingsUI আলাদা try/catch-এ
+  try {
+    if (typeof updateSavingsUI === 'function') {
+      updateSavingsUI(isSavingsEnabled, uid);
+    } else {
+      console.warn('updateSavingsUI is not defined — skipping');
+    }
+  } catch (uiErr) {
+    console.error('updateSavingsUI error:', uiErr);
+  }
+
+  // 🔧 onchange assignment (single listener)
+  toggle.onchange = async (e) => {
+    const newStatus = e.target.checked;
+    try {
+      await firebase.firestore().collection('users').doc(uid).update({
+        savingsEnabled: newStatus
+      });
+      if (typeof updateSavingsUI === 'function') {
+        updateSavingsUI(newStatus, uid);
+      }
+    } catch (err) {
+      console.error('Savings toggle update error:', {
+        code: err?.code,
+        message: err?.message
+      });
+      toggle.checked = !newStatus;
+      alert("সেভিংস সেটিং আপডেটে সমস্যা হয়েছে!");
+    }
+  };
 }
 
+// ============================================
+// 🔧 UPDATE SAVINGS UI
+// ============================================
 function updateSavingsUI(isEnabled, uid) {
   const statusDiv = document.getElementById('today-saving-status');
   const markBtn = document.getElementById('mark-saving-btn');
 
   if (isEnabled) {
     if (statusDiv) statusDiv.style.display = 'block';
-    checkTodaySavingFromTransactions(uid);
+    // 🔧 async call — try/catch
+    try {
+      if (typeof checkTodaySavingFromTransactions === 'function') {
+        checkTodaySavingFromTransactions(uid);
+      }
+    } catch (e) {
+      console.error('checkTodaySavingFromTransactions call error:', e);
+    }
   } else {
     if (statusDiv) statusDiv.style.display = 'none';
     if (markBtn) markBtn.style.display = 'none';
@@ -428,7 +478,7 @@ function updateSavingsUI(isEnabled, uid) {
 }
 
 // ============================================
-// TODAY SAVING CHECK & TRANSFER LOGIC
+// 🔧 TODAY SAVING CHECK — Firestore index issue handle
 // ============================================
 async function checkTodaySavingFromTransactions(uid) {
   const now = new Date();
@@ -443,13 +493,34 @@ async function checkTodaySavingFromTransactions(uid) {
     const transactionsRef = firebase.firestore().collection("users").doc(uid).collection("transactions");
     const userRef = firebase.firestore().collection("users").doc(uid);
 
-    const todaySnapshot = await transactionsRef.where("category", "==", "সঞ্চয়").where("date", "==", today).get();
-    const totalSnapshot = await transactionsRef.where("category", "==", "সঞ্চয়").get();
+    // 🔧 দুইটি query আলাদা try/catch-এ (index error handle করতে)
+    let totalSnapshot;
+    try {
+      totalSnapshot = await transactionsRef.where("category", "==", "সঞ্চয়").get();
+    } catch (indexErr) {
+      // 🔧 Firestore composite index error হলে
+      if (indexErr?.code === 'failed-precondition') {
+        console.warn(
+          '⚠️ Firestore composite index needed. Firebase Console-এ এই index তৈরি করুন:\n' +
+          'Collection: transactions (subcollection)\n' +
+          'Fields: category (Ascending), date (Ascending)\n' +
+          'Error link:', indexErr?.message
+        );
+      }
+      throw indexErr;
+    }
 
     const uniqueDates = new Set();
+    let totalSavedAmount = 0;
+    let hasToday = false;
+
     totalSnapshot.forEach(doc => {
       const d = doc.data();
-      if (d.date) uniqueDates.add(d.date);
+      if (d.date) {
+        uniqueDates.add(d.date);
+        if (d.date === today) hasToday = true;
+      }
+      totalSavedAmount += Number(d.amount) || 0;
     });
     const dayCount = uniqueDates.size;
 
@@ -460,11 +531,6 @@ async function checkTodaySavingFromTransactions(uid) {
     const userData = (userDoc.exists && userDoc.data()) || {};
     const totalTransferred = Number(userData.totalTransferredSavings) || 0;
     const lastTransferredCount = Number(userData.lastTransferredCount) || 0;
-
-    let totalSavedAmount = 0;
-    totalSnapshot.forEach(doc => {
-      totalSavedAmount += Number(doc.data().amount) || 0;
-    });
 
     const currentSavingsBalance = totalSavedAmount - totalTransferred;
     const nextTransferMilestone = (Math.floor(dayCount / 100)) * 100;
@@ -500,15 +566,11 @@ async function checkTodaySavingFromTransactions(uid) {
 
             alert('সফলভাবে ওয়ালেটে ট্রান্সফার হয়েছে! সেভিংস এখন ০ টাকা।');
 
-            statusDiv.className = 'success';
-            statusDiv.innerHTML = `<div class="scroll-text">✅ সঞ্চয় ওয়ালেটে ট্রান্সফার সম্পন্ন হয়েছে।</div>`;
-
             const activeNav = document.querySelector('.menu-button.active');
             if (activeNav && activeNav.id === 'nav-dashboard' && typeof loadDashboardSummary === 'function') {
               loadDashboardSummary();
             }
             checkTodaySavingFromTransactions(uid);
-
           } catch (err) {
             console.error("Transfer error:", err);
             alert('ট্রান্সফার করতে সমস্যা হয়েছে!');
@@ -518,7 +580,7 @@ async function checkTodaySavingFromTransactions(uid) {
       return;
     }
 
-    if (!todaySnapshot.empty) {
+    if (hasToday) {
       statusDiv.className = 'success';
       statusDiv.innerHTML = `<div class="scroll-text">✅ আজকের (${todayFormattedForMsg}) সঞ্চয় সম্পন্ন হয়েছে।</div>`;
     } else {
@@ -528,9 +590,14 @@ async function checkTodaySavingFromTransactions(uid) {
       statusDiv.className = 'warning';
       statusDiv.innerHTML = `<div class="scroll-text">⚠️ ${todayFormattedForMsg} তারিখে সঞ্চয় জমা হয়নি। আজকের সঞ্চয়: <strong>${convertToBanglaNumber(todaySavingAmount)}</strong> টাকা।</div>`;
     }
-
   } catch (error) {
-    console.error("সঞ্চয় চেক সমস্যা:", error);
+    // 🔧 বিস্তারিত error logging
+    console.error("সঞ্চয় চেক সমস্যা:", {
+      name: error?.name,
+      code: error?.code,
+      message: error?.message,
+      stack: error?.stack
+    });
   }
 }
 
@@ -549,7 +616,13 @@ function showUserName(user) {
 
   function setName(name) {
     const finalName = (name && String(name).trim()) ? String(name).trim() : 'অতিথি';
-    userNameDiv.innerHTML = `<strong style="font-size:1.1rem;">${finalName}</strong>`;
+    userNameDiv.innerHTML = `
+      <i class="fas fa-user-circle" style="font-size: 2.2rem; color: var(--primary);"></i>
+      <div class="profile-name-row">
+        <strong>${finalName}</strong>
+        <i class="fas fa-sign-in-alt"></i>
+      </div>
+    `;
   }
 
   if (user.displayName) {
