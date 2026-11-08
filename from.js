@@ -1,18 +1,32 @@
+// ============================================
+// from.js — সম্পূর্ণ সংশোধিত
+// ============================================
+
+// 🔧 auth listener guard — multiple listener প্রতিরোধ
+let unsubFormsAuth = null;
+
 function lonefrom() {
-  firebase.auth().onAuthStateChanged(user => {
+  // পুরনো listener unsubscribe
+  if (unsubFormsAuth) {
+    try { unsubFormsAuth(); } catch (e) {}
+    unsubFormsAuth = null;
+  }
+
+  unsubFormsAuth = firebase.auth().onAuthStateChanged(user => {
     if (!user) return;
     const currentUser = user;
 
     const content = document.getElementById('content');
+    if (!content) return;
+
     content.innerHTML = `
       <h2 class="titel">ফর্ম সেকশন</h2>
       <div class="tabs">
-        <button class="tab-btn active" onclick="showTab(event, 'fromsaction')">লেনদেন ফর্ম</button>
-        <button class="tab-btn" onclick="showTab(event, 'Lonesaction')">লোন ফর্ম</button>
-        <button class="tab-btn" onclick="showTab(event, 'transferTab')">ওয়ালেট ট্রান্সফার</button>
+        <button class="tab-btn active" onclick="showFromTab(event, 'fromsaction')">লেনদেন ফর্ম</button>
+        <button class="tab-btn" onclick="showFromTab(event, 'Lonesaction')">লোন ফর্ম</button>
+        <button class="tab-btn" onclick="showFromTab(event, 'transferTab')">ওয়ালেট ট্রান্সফার</button>
       </div>
 
-      <!-- লেনদেন ফর্ম -->
       <div id="fromsaction" class="tab-content active" style="display:block;">
         <div class="transaction-container">
           <form id="transactionForm" class="form-column">
@@ -37,7 +51,6 @@ function lonefrom() {
         <div id="recent-transactions"></div>
       </div>
 
-      <!-- লোন সেকশন -->
       <div id="Lonesaction" class="tab-content" style="display: none;">
         <h2 class="titel">লোন গৃহীত ও পরিশোধ</h2>
         <form id="loanForm" class="form-column">
@@ -68,12 +81,11 @@ function lonefrom() {
 
         <div id="loanSummary" class="loan-summary"></div>
 
-        <div style="max-width: 350px; margin: 20px auto;">
-          <canvas id="loanChart" width="400" height="200"></canvas>
+        <div style="max-width: 350px; margin: 20px auto; height: 250px;">
+          <canvas id="loanChart"></canvas>
         </div>
       </div>
 
-      <!-- ওয়ালেট ট্রান্সফার সেকশন -->
       <div id="transferTab" class="tab-content" style="display: none;">
         <h2 class="titel">ওয়ালেট টু ওয়ালেট ট্রান্সফার</h2>
 
@@ -122,7 +134,6 @@ function lonefrom() {
     const loanStatusMsg = document.getElementById("loanStatusMsg");
     const loanWalletSelect = document.getElementById("loanWalletSelect");
 
-    // Transfer elements
     const transferDate       = document.getElementById("transferDate");
     const fromWalletSelect   = document.getElementById("fromWalletSelect");
     const toWalletSelect     = document.getElementById("toWalletSelect");
@@ -131,6 +142,9 @@ function lonefrom() {
 
     let unsubscribeCategories = null;
     let unsubscribeWallets = null;
+    let unsubscribeRecent = null;
+    let unsubscribeLoans = null;
+    let unsubscribeTransfers = null;
     let allWallets = [];
     let lastTransactionsSnapshot = null;
     let lastLoanSnapshot = null;
@@ -157,15 +171,7 @@ function lonefrom() {
       setTimeout(() => { if (transferStatusMsg) transferStatusMsg.textContent = ""; }, 3000);
     }
 
-    window.showTab = function (event, tabId) {
-      document.querySelectorAll(".tab-content").forEach(t => t.style.display = "none");
-      document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
-      const target = document.getElementById(tabId);
-      if (target) target.style.display = "block";
-      if (event && event.currentTarget) event.currentTarget.classList.add("active");
-    };
-
-    // ------------------ Bangla formatting ------------------
+    // 🔧 Bangla formatting
     function formatBanglaNumber(number) {
       const engToBn = { 0: '০', 1: '১', 2: '২', 3: '৩', 4: '৪', 5: '৫', 6: '৬', 7: '৭', 8: '৮', 9: '৯' };
       return String(number).replace(/[0-9]/g, d => engToBn[d]);
@@ -183,7 +189,7 @@ function lonefrom() {
       return `${day} ${monthsBn[monthIdx]} ${year}`;
     }
 
-    // ------------------ Categories ------------------
+    // 🔧 Categories (real-time)
     function loadCategories(type) {
       if (!type) return;
       if (unsubscribeCategories) unsubscribeCategories();
@@ -209,7 +215,7 @@ function lonefrom() {
 
     typeSelect.addEventListener("change", () => loadCategories(typeSelect.value));
 
-    // ------------------ Wallets (Real-time) ------------------
+    // 🔧 Wallets (real-time)
     function loadWallets() {
       if (unsubscribeWallets) unsubscribeWallets();
       unsubscribeWallets = db.collection("users").doc(currentUser.uid)
@@ -234,19 +240,16 @@ function lonefrom() {
 
               const label = `${data.name} (${formatBanglaNumber(data.balance || 0)} ৳)`;
 
-              // normal wallet select
               const opt = document.createElement("option");
               opt.value = doc.id;
               opt.textContent = label;
               walletSelect.appendChild(opt);
 
-              // loan wallet select
               const opt3 = document.createElement("option");
               opt3.value = doc.id;
               opt3.textContent = label;
               loanWalletSelect.appendChild(opt3);
 
-              // transfer selects
               if (fromWalletSelect) {
                 const optFrom = document.createElement("option");
                 optFrom.value = doc.id;
@@ -261,7 +264,6 @@ function lonefrom() {
               }
             });
 
-          // restore selection
           if (prevWalletSel && [...walletSelect.options].some(o => o.value === prevWalletSel))
             walletSelect.value = prevWalletSel;
           if (prevLoanWalletSel && [...loanWalletSelect.options].some(o => o.value === prevLoanWalletSel))
@@ -277,7 +279,7 @@ function lonefrom() {
         }, err => console.error("ওয়ালেট লোডে সমস্যা: " + err.message));
     }
 
-    // ------------------ Transactions ------------------
+    // 🔧 Transaction submit
     document.getElementById("transactionForm").addEventListener("submit", e => {
       e.preventDefault();
       const date = document.getElementById("date").value;
@@ -290,6 +292,14 @@ function lonefrom() {
         return alert("সব ফিল্ড পূরণ করুন");
       if (!walletId)
         return alert("ওয়ালেট নির্বাচন করুন!");
+
+      const wallet = allWallets.find(w => w.id === walletId);
+      if (type === 'expense' && wallet) {
+        const bal = Number(wallet.balance) || 0;
+        if (bal < amount) {
+          return alert(`পর্যাপ্ত ব্যালেন্স নেই! "${wallet.name}"-এ আছে ${formatBanglaNumber(bal)} ৳`);
+        }
+      }
 
       const batch = db.batch();
 
@@ -314,7 +324,8 @@ function lonefrom() {
     });
 
     function loadRecentTransactions(uid) {
-      db.collection("users").doc(uid).collection("transactions")
+      if (unsubscribeRecent) unsubscribeRecent();
+      unsubscribeRecent = db.collection("users").doc(uid).collection("transactions")
         .orderBy("timestamp", "desc").limit(10)
         .onSnapshot(snapshot => {
           lastTransactionsSnapshot = snapshot;
@@ -344,7 +355,7 @@ function lonefrom() {
       container.innerHTML = html;
     }
 
-    // ------------------ Loan Section ------------------
+    // 🔧 Loan section
     function renderLoanSection() {
       const container = document.getElementById('loanNameContainer');
       const typeSelectLoan = document.getElementById('loanType');
@@ -440,17 +451,14 @@ function lonefrom() {
         e.preventDefault();
 
         const loanType = typeSelectLoan.value;
-
         let name = '';
+
         if (loanType === 'loan') {
-          if (!nameInput) {
-            return alert("লোন গ্রহণ টাইপ নির্বাচন করুন!");
-          }
+          if (!nameInput) return alert("লোন গ্রহণ টাইপ নির্বাচন করুন!");
           name = nameInput.value.trim();
         } else if (loanType === 'repayment') {
-          if (!nameSelect || nameSelect.disabled) {
+          if (!nameSelect || nameSelect.disabled)
             return alert("লোন পরিশোধ টাইপ নির্বাচন করুন এবং নাম সিলেক্ট করুন!");
-          }
           name = nameSelect.value;
         } else {
           return alert("লোনের ধরণ নির্বাচন করুন!");
@@ -460,15 +468,24 @@ function lonefrom() {
         const date = dateInput.value;
         const walletId = loanWalletSelect.value;
 
-        if (!name || isNaN(amount) || amount <= 0 || !date) {
+        if (!name || isNaN(amount) || amount <= 0 || !date)
           return alert("সব ফিল্ড পূরণ করুন");
-        }
-        if (!walletId) {
+        if (!walletId)
           return alert("কোন ওয়ালেটে লোন নিচ্ছেন/পরিশোধ করছেন সেটি নির্বাচন করুন!");
-        }
 
         const entryType = (loanType === 'loan') ? 'income' : 'expense';
         const category = (loanType === 'loan') ? 'লোন গ্রহণ' : 'লোন পরিশোধ';
+
+        // 🔧 ব্যালেন্স চেক (লোন পরিশোধে)
+        if (loanType === 'repayment') {
+          const wallet = allWallets.find(w => w.id === walletId);
+          if (wallet) {
+            const bal = Number(wallet.balance) || 0;
+            if (bal < amount) {
+              return alert(`পর্যাপ্ত ব্যালেন্স নেই! "${wallet.name}"-এ আছে ${formatBanglaNumber(bal)} ৳`);
+            }
+          }
+        }
 
         const batch = db.batch();
 
@@ -501,7 +518,8 @@ function lonefrom() {
 
     let loanChartInstance = null;
     function loadLoansRealtime(uid) {
-      db.collection("users").doc(uid).collection("transactions")
+      if (unsubscribeLoans) unsubscribeLoans();
+      unsubscribeLoans = db.collection("users").doc(uid).collection("transactions")
         .orderBy("timestamp", "desc").onSnapshot(snapshot => {
           lastLoanSnapshot = snapshot;
           renderLoans();
@@ -546,7 +564,6 @@ function lonefrom() {
         tbody.appendChild(tr);
       });
 
-      // Summary
       const summaryDiv = document.getElementById("loanSummary");
       if (summaryDiv) {
         let html = `<h3>📊 লোন সারসংক্ষেপ</h3><table class="transaction-table" style="width:100%; border-collapse: collapse;"><thead><tr class="loan-repaid"><th>নাম</th><th>লোন গ্রহণ</th><th>পরিশোধ</th><th>অবশিষ্ট</th></tr></thead><tbody>`;
@@ -565,7 +582,6 @@ function lonefrom() {
         summaryDiv.innerHTML = html;
       }
 
-      // Chart
       const canvas = document.getElementById('loanChart');
       if (!canvas) return;
 
@@ -578,6 +594,7 @@ function lonefrom() {
         loanChartInstance = null;
       }
 
+      // 🔧 maintainAspectRatio: false consistency
       loanChartInstance = new Chart(ctx, {
         type: 'pie',
         data: {
@@ -592,12 +609,12 @@ function lonefrom() {
         },
         options: {
           responsive: true,
-          maintainAspectRatio: true,
+          maintainAspectRatio: false,
           plugins: {
             title: {
               display: true,
               text: hasData ? 'লোন গ্রহণ বনাম পরিশোধ (৳)' : 'কোনো লোন ডাটা নেই',
-              font: { size: 18 }
+              font: { size: 16 }
             },
             tooltip: {
               enabled: hasData,
@@ -607,17 +624,16 @@ function lonefrom() {
                 }
               }
             },
-            legend: {
-              display: hasData
-            }
+            legend: { display: hasData }
           }
         }
       });
     }
 
-    // ------------------ Wallet Transfer Section ------------------
+    // 🔧 Transfers realtime
     function loadTransfersRealtime(uid) {
-      db.collection("users").doc(uid).collection("transactions")
+      if (unsubscribeTransfers) unsubscribeTransfers();
+      unsubscribeTransfers = db.collection("users").doc(uid).collection("transactions")
         .where("category", "==", "ওয়ালেট ট্রান্সফার")
         .orderBy("timestamp", "desc")
         .onSnapshot(snapshot => {
@@ -716,12 +732,21 @@ function lonefrom() {
       }
     });
 
-    // ------------------ Initial Load ------------------
+    // Initial Load
     typeSelect.value = 'income';
     loadCategories('income');
     loadWallets();
     loadRecentTransactions(currentUser.uid);
     renderLoanSection();
-    loadTransfersRealtime(currentUser.uid);  // 🆕 transfer listener চালু
+    loadTransfersRealtime(currentUser.uid);
   });
+}
+
+// 🔧 Local showTab — global override প্রতিরোধ
+function showFromTab(event, tabId) {
+  document.querySelectorAll("#fromsaction, #Lonesaction, #transferTab").forEach(t => t.style.display = "none");
+  document.querySelectorAll("#content .tab-btn").forEach(b => b.classList.remove("active"));
+  const target = document.getElementById(tabId);
+  if (target) target.style.display = "block";
+  if (event && event.currentTarget) event.currentTarget.classList.add("active");
 }
