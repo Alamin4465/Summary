@@ -1,15 +1,29 @@
+// ============================================
+// monthday.js — সম্পূর্ণ সংশোধিত
+// (টাইপ/ক্যাটাগরি ফিল্টারে Line চার্ট)
+// ============================================
+
+// 🔧 global chart instances (leak প্রতিরোধ)
+let _monthdayFilterChart = null;
+let _monthdayTypeChart = null;
+let _monthdaySummaryChart = null;
+
 function transactionFilter() {
   const content = document.getElementById('content');
   if (!content) return;
 
+  // 🔧 আগের chart destroy
+  if (_monthdayFilterChart) { try { _monthdayFilterChart.destroy(); } catch(e){} _monthdayFilterChart = null; }
+  if (_monthdayTypeChart)   { try { _monthdayTypeChart.destroy(); }   catch(e){} _monthdayTypeChart = null; }
+  if (_monthdaySummaryChart){ try { _monthdaySummaryChart.destroy(); }catch(e){} _monthdaySummaryChart = null; }
+
   content.innerHTML = `
    <h2 class="titel">লেনদেন ফিল্টার</h2>
 <div class="tabs">
-  <button class="tab-btn active" onclick="showTab(event, 'dateFilterTab')">তারিখ/মাস ফিল্টার</button>
-  <button class="tab-btn" onclick="showTab(event, 'typeFilterTab')">টাইপ/ক্যাটাগরি ফিল্টার</button>
+  <button class="tab-btn active" onclick="showFilterTab(event, 'dateFilterTab')">তারিখ/মাস ফিল্টার</button>
+  <button class="tab-btn" onclick="showFilterTab(event, 'typeFilterTab')">টাইপ/ক্যাটাগরি ফিল্টার</button>
 </div>
 
-<!-- তারিখ/মাস ফিল্টার ট্যাব -->
 <div id="dateFilterTab" class="tab-content" style="display: block;">
   <div class="Filter-monthday">
     <div class="monthday">
@@ -41,8 +55,7 @@ function transactionFilter() {
         </thead>
         <tbody></tbody>
       </table>
-      
-      <!-- সামারি টেবিল -->
+
       <table id="monthlySummary" class="transaction-table"></table>
     </div>
 
@@ -52,7 +65,6 @@ function transactionFilter() {
   </div>
 </div>
 
-<!-- টাইপ/ক্যাটাগরি ফিল্টার ট্যাব -->
 <div id="typeFilterTab" class="tab-content" style="display: none;">
   <div class="Filter-monthday">
     <div class="monthday">
@@ -86,7 +98,7 @@ function transactionFilter() {
       </table>
     </div>
 
-    <div class="chart-container" style="height: 350px; margin-top: 20px;">
+    <div class="chart-container" style="height: 350px; margin-top: 20px; background: var(--glass-bg); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid var(--glass-border); border-radius: 14px; padding: 15px;">
       <canvas id="typeCategoryChart"></canvas>
     </div>
   </div>
@@ -95,10 +107,6 @@ function transactionFilter() {
 
   const db = firebase.firestore();
 
-  let filterSummaryChart = null;
-  let typeCategoryChart = null;
-
-  // ============== Utility ==============
   function formatTaka(amount) {
     const num = Number(amount);
     if (!Number.isFinite(num)) return "৳০";
@@ -107,12 +115,6 @@ function transactionFilter() {
       currency: "BDT",
       minimumFractionDigits: 0
     });
-  }
-
-  function toBanglaNumber(num) {
-    const bnNums = ['০','১','২','৩','৪','৫','৬','৭','৮','৯'];
-    if (num === null || num === undefined) return '০';
-    return String(num).replace(/[0-9]/g, d => bnNums[d]);
   }
 
   function formatBanglaPercent(value) {
@@ -127,16 +129,6 @@ function transactionFilter() {
     return data.type === "transfer" || data.category === "ওয়ালেট ট্রান্সফার";
   }
 
-  // ============== Tabs ==============
-  window.showTab = function (event, tabId) {
-    document.querySelectorAll('.tab-content').forEach(tab => tab.style.display = 'none');
-    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-    const target = document.getElementById(tabId);
-    if (target) target.style.display = 'block';
-    if (event && event.currentTarget) event.currentTarget.classList.add('active');
-  };
-
-  // ============== Date & Month Filter ==============
   const dateFilter = document.getElementById("dateFilter");
   const monthFilter = document.getElementById("monthFilter");
   const resetBtn = document.getElementById("resetFilterBtn");
@@ -151,14 +143,8 @@ function transactionFilter() {
       summaryEl.innerHTML = '';
       summaryEl.style.display = "none";
     }
-    if (filterSummaryChart) {
-      try { filterSummaryChart.destroy(); } catch (e) {}
-      filterSummaryChart = null;
-    }
-    if (summaryChart) {
-      try { summaryChart.destroy(); } catch (e) {}
-      summaryChart = null;
-    }
+    if (_monthdayFilterChart) { try { _monthdayFilterChart.destroy(); } catch (e) {} _monthdayFilterChart = null; }
+    if (_monthdaySummaryChart) { try { _monthdaySummaryChart.destroy(); } catch (e) {} _monthdaySummaryChart = null; }
   });
 
   dateFilter?.addEventListener("change", () => {
@@ -190,16 +176,12 @@ function transactionFilter() {
 
     let unsubscribeCategories = null;
 
-    function setStatus(msg, isError = false) {
-      console.log(msg);
-    }
-
     function loadCategories(type) {
       if (!type) return;
       if (unsubscribeCategories) unsubscribeCategories();
 
       if (!currentUser) {
-        setStatus("লগইন নেই", true);
+        console.warn("লগইন নেই");
         return;
       }
 
@@ -209,10 +191,7 @@ function transactionFilter() {
           categorySelector.innerHTML = '<option value="">-- সব ক্যাটাগরি --</option>';
           categorySelector.disabled = snapshot.empty;
 
-          if (snapshot.empty) {
-            setStatus("এই টাইপে কোনো ক্যাটেগরি নেই");
-            return;
-          }
+          if (snapshot.empty) return;
 
           snapshot.docs
             .sort((a, b) => (a.data().name || '').localeCompare(b.data().name || '', "bn-BD"))
@@ -223,9 +202,7 @@ function transactionFilter() {
               opt.dataset.docId = doc.id;
               categorySelector.appendChild(opt);
             });
-
-          setStatus(`ক্যাটাগরি লোড হয়েছে (${snapshot.size})`);
-        }, err => setStatus("ক্যাটাগরি লোডে সমস্যা: " + err.message, true));
+        }, err => console.error("ক্যাটাগরি লোডে সমস্যা:", err.message));
     }
 
     typeSelector.addEventListener("change", () => {
@@ -259,13 +236,13 @@ function transactionFilter() {
 
     if (!currentUser) {
       tbody.innerHTML = '<tr><td colspan="3" class="error">অনুগ্রহ করে লগইন করুন</td></tr>';
-      clearChart();
+      clearTypeChart();
       return;
     }
 
     if (!selectedType) {
       tbody.innerHTML = '<tr><td colspan="3" class="message">টাইপ নির্বাচন করুন</td></tr>';
-      clearChart();
+      clearTypeChart();
       return;
     }
 
@@ -293,7 +270,7 @@ function transactionFilter() {
 
       if (transactions.length === 0) {
         tbody.innerHTML = '<tr><td colspan="3" class="message">কোনো লেনদেন পাওয়া যায়নি</td></tr>';
-        clearChart();
+        clearTypeChart();
         return;
       }
 
@@ -318,147 +295,205 @@ function transactionFilter() {
       `;
       tbody.appendChild(totalRow);
 
-      // 🆕 শুধু চার্ট আঁকা হবে (সেভিংস চার্ট বাদ দেওয়া হয়েছে)
-      drawTypeCategoryChart(selectedType, transactions, selectedCategory);
+      // 🔧 Line chart
+      drawTypeCategoryLineChart(selectedType, transactions, selectedCategory);
 
     } catch (error) {
       console.error("Firestore Error:", error);
-      tbody.innerHTML = `<tr><td colspan="3" class="error">ডেটা লোডে সমস্যা হয়েছে</td></tr>`;
-      clearChart();
+      tbody.innerHTML = `<tr><td colspan="3" class="error">ডেটা লোডে সমস্যা: ${error.code || error.message}</td></tr>`;
+      clearTypeChart();
     }
   }
 
-  function drawTypeCategoryChart(type, transactions, selectedCategory = '') {
-    const typeChartCanvas = document.getElementById("typeCategoryChart");
-    if (!typeChartCanvas) return;
+  // ============================================
+  // 🔧 Line Chart — তারিখ অনুযায়ী ক্যাটাগরি প্রবণতা
+  // ============================================
+  function drawTypeCategoryLineChart(type, transactions, selectedCategory = '') {
+    const canvas = document.getElementById("typeCategoryChart");
+    if (!canvas) return;
 
-    typeChartCanvas.style.display = "block";
-    const ctx = typeChartCanvas.getContext("2d");
+    canvas.style.display = "block";
+    const ctx = canvas.getContext("2d");
 
-    if (typeCategoryChart) {
-      try { typeCategoryChart.destroy(); } catch (e) {}
-      typeCategoryChart = null;
+    if (_monthdayTypeChart) {
+      try { _monthdayTypeChart.destroy(); } catch (e) {}
+      _monthdayTypeChart = null;
     }
 
-    const categoryTotals = {};
+    // 🔧 তারিখ অনুযায়ী ও ক্যাটাগরি অনুযায়ী গ্রুপ
+    const dateCategoryMap = {}; // { date: { category1: amt, category2: amt } }
+    const categorySet = new Set();
+
     transactions.forEach(tx => {
-      if (!categoryTotals[tx.category]) categoryTotals[tx.category] = 0;
-      categoryTotals[tx.category] += Number(tx.amount) || 0;
+      const date = tx.date || "N/A";
+      const category = tx.category || "অন্যান্য";
+      const amt = Number(tx.amount) || 0;
+
+      if (!dateCategoryMap[date]) dateCategoryMap[date] = {};
+      dateCategoryMap[date][category] = (dateCategoryMap[date][category] || 0) + amt;
+      categorySet.add(category);
     });
 
-    let labels = Object.keys(categoryTotals);
-    let data = labels.map(label => categoryTotals[label]);
+    const sortedDates = Object.keys(dateCategoryMap).sort((a, b) => parseDateSafe(a) - parseDateSafe(b));
+    const categories = Array.from(categorySet);
 
-    if (selectedCategory && labels.includes(selectedCategory)) {
-      labels = [selectedCategory];
-      data = [categoryTotals[selectedCategory]];
-    }
+    const hasData = sortedDates.length > 0 && categories.length > 0;
 
-    const totalSum = data.reduce((a, b) => a + b, 0);
-    const hasData = labels.length > 0 && totalSum > 0;
+    // 🔧 Color palette (type অনুযায়ী)
+    const greenPalette = ['#4caf50', '#22c55e', '#16a34a', '#15803d', '#166534', '#86efac', '#bbf7d0'];
+    const redPalette = ['#f44336', '#ef4444', '#dc2626', '#b91c1c', '#991b1b', '#fca5a5', '#fecaca'];
+    const palette = type === "income" ? greenPalette : redPalette;
 
-    const colors = type === "income"
-      ? generateGreenShades(labels.length)
-      : generateRedShades(labels.length);
+    // 🔧 Dataset তৈরি (প্রতিটি ক্যাটাগরির জন্য একটি লাইন)
+    const datasets = categories.map((cat, i) => {
+      const color = palette[i % palette.length];
+      const data = sortedDates.map(date => (dateCategoryMap[date][cat] || 0));
+      return {
+        label: cat,
+        data: data,
+        borderColor: color,
+        backgroundColor: color + '33', // alpha
+        pointBackgroundColor: color,
+        pointBorderColor: '#fff',
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        tension: 0.35,
+        fill: categories.length === 1, // একটি ক্যাটাগরি হলে area fill
+        borderWidth: 2.5
+      };
+    });
 
-    const safeLabels = hasData ? labels : ['কোনো ডাটা নেই'];
-    const safeData = hasData ? data : [1];
-    const safeColors = hasData ? colors : ['#9ca3af'];
+    // 🔧 যদি data না থাকে
+    const safeLabels = hasData ? sortedDates : ['কোনো ডাটা নেই'];
+    const safeDatasets = hasData ? datasets : [{
+      label: 'কোনো ডাটা নেই',
+      data: [0],
+      borderColor: '#9ca3af',
+      backgroundColor: 'rgba(156,163,175,0.2)',
+      pointRadius: 0
+    }];
 
-    typeCategoryChart = new Chart(ctx, {
-      type: 'pie',
+    _monthdayTypeChart = new Chart(ctx, {
+      type: 'line',
       data: {
         labels: safeLabels,
-        datasets: [{
-          data: safeData,
-          backgroundColor: safeColors,
-          borderWidth: 2,
-          borderColor: '#fff'
-        }]
+        datasets: safeDatasets
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        layout: { padding: 15 },
-        animation: { duration: 1000, easing: 'easeOutQuart' },
+        animation: { duration: 800, easing: 'easeOutQuart' },
+        interaction: {
+          mode: 'index',
+          intersect: false
+        },
         plugins: {
           legend: {
-            display: hasData,
-            position: window.innerWidth < 480 ? "bottom" : "right",
+            display: hasData && categories.length <= 8,
+            position: 'bottom',
             labels: {
-              color: '#374151',
-              font: { size: 13, weight: 'bold' },
+              color: '#e5e7eb',
+              font: { size: 12, weight: 'bold' },
               padding: 12,
-              boxWidth: 14
-            }
-          },
-          datalabels: {
-            color: "#fff",
-            display: hasData,
-            font: { weight: 'bold', size: 13 },
-            formatter: (value) => {
-              if (totalSum === 0) return '০%';
-              const percent = (value / totalSum) * 100;
-              return formatBanglaPercent(percent);
+              boxWidth: 14,
+              usePointStyle: true,
+              pointStyle: 'circle'
             }
           },
           tooltip: {
             enabled: hasData,
+            backgroundColor: 'rgba(17, 24, 39, 0.95)',
+            titleColor: '#fff',
+            bodyColor: '#e5e7eb',
+            borderColor: 'rgba(255,255,255,0.2)',
+            borderWidth: 1,
+            padding: 12,
+            titleFont: { size: 14, weight: 'bold' },
+            bodyFont: { size: 13 },
             callbacks: {
-              label: function (context) {
-                const label = context.label || '';
-                const value = Number(context.parsed) || 0;
-                const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                const percentage = total === 0 ? 0 : ((value / total) * 100).toFixed(1);
-                return `${label}: ${formatTaka(value)} (${percentage}%)`;
+              title: (items) => {
+                const date = items[0].label;
+                return `তারিখ: ${convertToBanglaDate(date)}`;
+              },
+              label: (context) => {
+                const val = Number(context.parsed.y) || 0;
+                return `${context.dataset.label}: ${formatTaka(val)}`;
+              },
+              footer: (items) => {
+                const total = items.reduce((sum, it) => sum + (Number(it.parsed.y) || 0), 0);
+                return `মোট: ${formatTaka(total)}`;
               }
             }
           },
           title: {
             display: true,
             text: hasData
-              ? (type === "income" ? "আয়ের ক্যাটাগরি পাই চার্ট" : "ব্যয়ের ক্যাটাগরি পাই চার্ট")
+              ? (type === "income" ? "আয়ের ক্যাটাগরি প্রবণতা (তারিখ অনুযায়ী)" : "ব্যয়ের ক্যাটাগরি প্রবণতা (তারিখ অনুযায়ী)")
               : "কোনো ডাটা নেই",
             font: { size: 16, weight: 'bold' },
-            color: "#374151",
-            padding: { bottom: 10 }
+            color: "#ffffff",
+            padding: { bottom: 15 }
+          },
+          datalabels: {
+            display: false // line chart-এ datalabels বন্ধ
+          }
+        },
+        scales: {
+          x: {
+            grid: { color: 'rgba(255,255,255,0.08)' },
+            ticks: {
+              color: '#e5e7eb',
+              font: { size: 12 },
+              maxRotation: 45,
+              minRotation: 0,
+              autoSkip: true,
+              maxTicksLimit: 10
+            }
+          },
+          y: {
+            beginAtZero: true,
+            grid: { color: 'rgba(255,255,255,0.1)' },
+            ticks: {
+              color: '#e5e7eb',
+              font: { size: 12 },
+              callback: (v) => '৳' + Number(v).toLocaleString('bn-BD')
+            }
           }
         }
-      },
-      plugins: [ChartDataLabels]
+      }
     });
   }
 
-  function generateGreenShades(count) {
-    const shades = [];
-    const baseHue = 120;
-    const saturation = 70;
-    const lightnessStart = 35;
-    const lightnessEnd = 65;
-    for (let i = 0; i < count; i++) {
-      const lightness = lightnessStart + ((lightnessEnd - lightnessStart) / (count - 1 || 1)) * i;
-      shades.push(`hsl(${baseHue}, ${saturation}%, ${lightness}%)`);
+  // 🔧 তারিখ parse helper
+  function parseDateSafe(dateStr) {
+    if (!dateStr) return new Date(0);
+    const s = String(dateStr).trim();
+    if (/^\d{4}-\d{1,2}-\d{1,2}/.test(s)) {
+      const d = new Date(s);
+      if (!isNaN(d.getTime())) return d;
     }
-    return shades;
+    const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+    if (m) {
+      let day = parseInt(m[1], 10);
+      let month = parseInt(m[2], 10);
+      let year = parseInt(m[3], 10);
+      if (year < 100) year += 2000;
+      const d = new Date(year, month - 1, day);
+      if (!isNaN(d.getTime())) return d;
+    }
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? new Date(0) : d;
   }
 
-  function generateRedShades(count) {
-    const shades = [];
-    const baseHue = 0;
-    const saturation = 80;
-    const lightnessStart = 40;
-    const lightnessEnd = 70;
-    for (let i = 0; i < count; i++) {
-      const lightness = lightnessStart + ((lightnessEnd - lightnessStart) / (count - 1 || 1)) * i;
-      shades.push(`hsl(${baseHue}, ${saturation}%, ${lightness}%)`);
-    }
-    return shades;
+  function convertToBanglaDate(dateStr) {
+    const bnNums = ['০','১','২','৩','৪','৫','৬','৭','৮','৯'];
+    return String(dateStr).replace(/\d/g, d => bnNums[d]);
   }
 
-  function clearChart() {
-    if (typeCategoryChart) {
-      try { typeCategoryChart.destroy(); } catch (e) {}
-      typeCategoryChart = null;
+  function clearTypeChart() {
+    if (_monthdayTypeChart) {
+      try { _monthdayTypeChart.destroy(); } catch (e) {}
+      _monthdayTypeChart = null;
     }
   }
 
@@ -474,11 +509,9 @@ function transactionFilter() {
       .get()
       .then(snapshot => {
         let hasRow = false;
-
         snapshot.forEach(doc => {
           const data = doc.data();
           if (isTransfer(data)) return;
-
           hasRow = true;
           const income = data.type === "income" ? formatTaka(data.amount) : "";
           const expense = data.type === "expense" ? formatTaka(data.amount) : "";
@@ -486,7 +519,6 @@ function transactionFilter() {
           const row = document.createElement("tr");
           if (data.type === "income") row.classList.add("income-row");
           else if (data.type === "expense") row.classList.add("expense-row");
-
           if (data.category === "লোন গ্রহণ") row.classList.add("loan-taken");
           else if (data.category === "লোন পরিশোধ") row.classList.add("loan-repaid");
 
@@ -505,7 +537,7 @@ function transactionFilter() {
       })
       .catch(err => {
         console.error("filterByDate error:", err);
-        tbody.innerHTML = "<tr><td colspan='4' class='message'>লোডে সমস্যা</td></tr>";
+        tbody.innerHTML = `<tr><td colspan='4' class='message'>লোডে সমস্যা: ${err.code || err.message}</td></tr>`;
       });
   }
 
@@ -552,7 +584,6 @@ function transactionFilter() {
           const row = document.createElement("tr");
           if (data.type === "income") row.classList.add("income-row");
           else if (data.type === "expense") row.classList.add("expense-row");
-
           if (data.category === "লোন গ্রহণ") row.classList.add("loan-taken");
           else if (data.category === "লোন পরিশোধ") row.classList.add("loan-repaid");
 
@@ -567,13 +598,11 @@ function transactionFilter() {
       })
       .catch(err => {
         console.error("filterByMonth error:", err);
-        tbody.innerHTML = "<tr><td colspan='4' class='message'>লোডে সমস্যা</td></tr>";
+        tbody.innerHTML = `<tr><td colspan='4' class='message'>লোডে সমস্যা: ${err.code || err.message}</td></tr>`;
       });
   }
 
-  // ============================================
-  // 🆕 DAILY SUMMARY (ছবির মতো বর্ডার ও width)
-  // ============================================
+  // ============== Daily Summary ==============
   function calculateDailySummary(userId, date) {
     const ref = db.collection("users").doc(userId).collection("transactions");
 
@@ -659,12 +688,15 @@ function transactionFilter() {
       drawFilterSummaryChart(`${dateLabel} — আয় / ব্যয় / নিট`, income, expense);
     }).catch(err => {
       console.error("calculateDailySummary error:", err);
+      const summaryTable = document.getElementById("monthlySummary");
+      if (summaryTable) {
+        summaryTable.style.display = "table";
+        summaryTable.innerHTML = `<tr><td colspan="5" class="message">ডেটা লোডে সমস্যা: ${err.code || err.message}</td></tr>`;
+      }
     });
   }
 
-  // ============================================
-  // 🆕 MONTHLY SUMMARY (ছবির মতো বর্ডার ও width)
-  // ============================================
+  // ============== Monthly Summary ==============
   function calculateMonthlySummary(userId, month) {
     const [year, mon] = month.split("-").map(Number);
     if (!year || !mon) return;
@@ -761,10 +793,13 @@ function transactionFilter() {
       drawFilterSummaryChart(`${monthLabel} — আয় / ব্যয় / নিট`, income, expense);
     }).catch(err => {
       console.error("calculateMonthlySummary error:", err);
+      const summaryTable = document.getElementById("monthlySummary");
+      if (summaryTable) {
+        summaryTable.style.display = "table";
+        summaryTable.innerHTML = `<tr><td colspan="5" class="message">ডেটা লোডে সমস্যা: ${err.code || err.message}</td></tr>`;
+      }
     });
   }
-
-  let summaryChart = null;
 
   function drawFilterSummaryChart(title, income, expense) {
     const total = income - expense;
@@ -773,12 +808,12 @@ function transactionFilter() {
 
     const ctx = canvas.getContext("2d");
 
-    if (summaryChart) {
-      try { summaryChart.destroy(); } catch (e) {}
-      summaryChart = null;
+    if (_monthdaySummaryChart) {
+      try { _monthdaySummaryChart.destroy(); } catch (e) {}
+      _monthdaySummaryChart = null;
     }
 
-    summaryChart = new Chart(ctx, {
+    _monthdaySummaryChart = new Chart(ctx, {
       type: "bar",
       data: {
         labels: ["আয়", "ব্যয়", "নিট টাকা"],
@@ -822,8 +857,8 @@ function transactionFilter() {
           datalabels: {
             color: "#111827",
             font: { weight: "bold", size: 12 },
-            anchor: (ctx) => ctx.dataset.data[ctx.dataIndex] < 0 ? "start" : "end",
-            align: (ctx) => ctx.dataset.data[ctx.dataIndex] < 0 ? "bottom" : "top",
+            anchor: (ctx) => ctx.dataset.data[ctx.datasetIndex] < 0 ? "start" : "end",
+            align: (ctx) => ctx.dataset.data[ctx.datasetIndex] < 0 ? "bottom" : "top",
             offset: 6,
             formatter: (value) => {
               const v = Number(value) || 0;
@@ -857,4 +892,13 @@ function transactionFilter() {
       plugins: [ChartDataLabels]
     });
   }
+}
+
+// 🔧 Local showTab — global override প্রতিরোধ
+function showFilterTab(event, tabId) {
+  document.querySelectorAll("#dateFilterTab, #typeFilterTab").forEach(t => t.style.display = 'none');
+  document.querySelectorAll("#content .tab-btn").forEach(b => b.classList.remove('active'));
+  const target = document.getElementById(tabId);
+  if (target) target.style.display = 'block';
+  if (event && event.currentTarget) event.currentTarget.classList.add('active');
 }
