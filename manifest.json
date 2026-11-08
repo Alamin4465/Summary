@@ -1,24 +1,28 @@
 {
   "name": "আয়-ব্যয় ব্যবস্থাপনা",
-  "short_name": "হিসাব",
-  "start_url": "/Summary/index.html",
-  "scope": "/Summary/",
+  "short_name": "আয়-ব্যয় হিসাব",
+  "description": "আপনার দৈনন্দিন আয় এবং ব্যয়ের হিসাব রাখার সহজ অ্যাপ।",
+  "start_url": "./index.html",
+  "scope": "./",
   "display": "standalone",
+  "orientation": "portrait",
   "background_color": "#e0eafc",
   "theme_color": "#3b82f6",
-  "description": "আপনার দৈনন্দিন আয় এবং ব্যয়ের হিসাব রাখার সহজ অ্যাপ।",
+  "lang": "bn",
+  "dir": "ltr",
+  "categories": ["finance", "productivity"],
   "icons": [
     {
       "src": "Image.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
       "src": "Image.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     }
   ]
 }
