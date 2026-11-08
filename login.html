@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>লগইন / রেজিস্ট্রেশন</title>
   <link rel="stylesheet" href="login.css" />
+
+  <!-- 🔧 Firebase v9.22.2 (index.html-এর সাথে match) -->
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
@@ -13,17 +15,18 @@
 <body>
   <div class="container">
     <div class="toggle-buttons">
-      <button onclick="showForm('login')">লগইন</button>
-      <button onclick="showForm('register')">রেজিস্টার</button>
+      <button type="button" onclick="showForm('login')">লগইন</button>
+      <button type="button" onclick="showForm('register')">রেজিস্টার</button>
     </div>
 
     <!-- Login Form -->
     <form id="loginForm" class="form active">
       <h2>লগইন করুন</h2>
       <input type="email" id="loginEmail" placeholder="ইমেইল" required />
-      <input type="password" id="loginPassword" placeholder="পাসওয়ার্ড" required />
+      <input type="password" id="loginPassword" placeholder="পাসওয়ার্ড" required />
       <button type="submit">লগইন</button>
-      <p><a href="#" onclick="toggleResetSection()">পাসওয়ার্ড ভুলে গেছেন?</a></p>
+      <p id="loginMessage" style="min-height:20px; font-weight:bold;"></p>
+      <p><a href="#" onclick="toggleResetSection(); return false;">পাসওয়ার্ড ভুলে গেছেন?</a></p>
     </form>
 
     <!-- Register Form -->
@@ -38,18 +41,18 @@
       </select>
       <input type="date" id="regDob" required />
       <input type="email" id="regEmail" placeholder="ইমেইল" required />
-      <input type="password" id="regPassword" placeholder="পাসওয়ার্ড" required />
-      <input type="password" id="regRetypePassword" placeholder="পুনরায় পাসওয়ার্ড দিন" required />
+      <input type="password" id="regPassword" placeholder="পাসওয়ার্ড" required />
+      <input type="password" id="regRetypePassword" placeholder="পুনরায় পাসওয়ার্ড দিন" required />
       <button type="submit">রেজিস্টার</button>
       <p id="registerMessage"></p>
     </form>
 
     <!-- Password Reset Section -->
     <div id="resetSection" class="form" style="display:none;">
-      <h2>পাসওয়ার্ড রিসেট করুন</h2>
+      <h2>পাসওয়ার্ড রিসেট করুন</h2>
       <input type="email" id="resetEmail" placeholder="ইমেইল" required />
       <input type="date" id="resetDob" required />
-      <button onclick="resetPassword()">রিসেট লিঙ্ক পাঠান</button>
+      <button type="button" onclick="resetPassword()">রিসেট লিঙ্ক পাঠান</button>
       <p id="resetMessage"></p>
     </div>
   </div>
