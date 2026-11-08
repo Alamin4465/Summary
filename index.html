@@ -4,50 +4,52 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="description" content="আয়-ব্যয় ব্যবস্থাপনা ও সঞ্চয় ট্র্যাকার" />
-  
   <title>আয়-ব্যয় ব্যবস্থাপনা</title>
 
-  <!-- Font Awesome -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-
-  <!-- Main CSS -->
   <link rel="stylesheet" href="style.css?v=15.0" />
 
-  <!-- PWA Manifest & Mobile Settings -->
   <link rel="manifest" href="manifest.json" />
-  <meta name="theme-color" content="#3b82f6" />
+  <meta name="theme-color" content="#3b82f6" id="theme-color-meta" />
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="আয়-ব্যয়">
   <link rel="apple-touch-icon" href="Image.png">
 
-  <!-- Firebase SDKs -->
-  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
-  <script src="firebase-config.js"></script>
+  <!-- Chart.js + plugins -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.44.0/dist/apexcharts.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 
-  <!-- Chart Libraries -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@1.4.0"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
-
-  <!-- Chart plugin registration -->
   <script>
-    if (typeof Chart !== 'undefined') {
-      if (window['chartjs-plugin-annotation']) {
-        try { Chart.register(window['chartjs-plugin-annotation']); } catch (e) {}
+    (function registerChartPlugins() {
+      const tryRegister = () => {
+        if (typeof Chart === 'undefined') return;
+        const plugin = window['chartjs-plugin-annotation'];
+        if (plugin && typeof Chart.register === 'function') {
+          try { Chart.register(plugin); } catch (e) { console.warn('annotation register:', e); }
+        }
+        if (window.ChartDataLabels && typeof Chart.register === 'function') {
+          try { Chart.register(window.ChartDataLabels); } catch (e) { console.warn('datalabels register:', e); }
+        }
+      };
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', tryRegister);
+      } else {
+        tryRegister();
       }
-      if (window.ChartDataLabels) {
-        try { Chart.register(window.ChartDataLabels); } catch (e) {}
-      }
-    }
+    })();
   </script>
+
+  <!-- 🔧 Firebase v9.22.2 (login.html-এর সাথে match) -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+  <script src="firebase-config.js"></script>
 </head>
 <body>
 
-  <!-- 📱 মোবাইলের জন্য টপবার -->
   <header class="mobile-topbar">
     <button id="menu-toggle" aria-label="মেনু">
       <i class="fas fa-bars"></i>
@@ -55,13 +57,9 @@
     <div class="mobile-title">লোড হচ্ছে...</div>
   </header>
 
-  <!-- 🟢 ওভারলে -->
   <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
 
-  <!-- 🔵 সাইডবার -->
   <aside class="sidebar" id="sidebar">
-
-    <!-- 🆕 সাইডবার হেডার: লোগো ও অ্যাপের নাম (পাশাপাশি) -->
     <div class="sidebar-header">
       <div class="logo-box">
         <i class="fas fa-wallet" style="color: #3b82f6;"></i>
@@ -69,9 +67,7 @@
       </div>
     </div>
 
-    <!-- 🆕 ইউজার প্রোফাইল কার্ড (লোগো উপরে, নাম ও সাইন-ইন আইকন পাশে) -->
-    <div id="user-name" title="প্রোফাইল দেখুন">
-      <!-- এই অংশটি JS থেকে রেন্ডার হবে, তবে প্রাথমিকভাবে এটি দেখাবে -->
+    <div id="user-name" role="button" tabindex="0" title="প্রোফাইল দেখুন" aria-label="প্রোফাইল দেখুন">
       <i class="fas fa-user-circle" style="font-size: 2.2rem; color: var(--primary);"></i>
       <div class="profile-name-row">
         <strong>লোড হচ্ছে...</strong>
@@ -79,7 +75,6 @@
       </div>
     </div>
 
-    <!-- থিম টগল বাটন -->
     <div class="theme-toggle-wrapper">
       <span id="theme-label">ডিফল্ট থিম</span>
       <label class="switch">
@@ -87,8 +82,7 @@
         <span class="slider round"></span>
       </label>
     </div>
-    
-    <!-- সেভিংস অন/অফ টগল বাটন -->
+
     <div class="savings-toggle-wrapper">
       <span>সেভিংস চালু</span>
       <label class="switch">
@@ -97,12 +91,10 @@
       </label>
     </div>
 
-    <!-- সেভিং স্ট্যাটাস -->
     <div id="today-saving-status"><span>লোড হচ্ছে...</span></div>
 
     <button id="mark-saving-btn" style="display:none;">আজকের সঞ্চয় সম্পন্ন করলাম</button>
 
-    <!-- নেভিগেশন -->
     <nav id="topbar">
       <div class="menu-row">
         <button class="menu-button active" id="nav-dashboard"><i class="fas fa-home"></i> ড্যাশবোর্ড</button>
@@ -114,12 +106,11 @@
     </nav>
   </aside>
 
-  <!-- ⚪ মেইন কনটেন্ট -->
   <main id="content">
     <p>লোড হচ্ছে...</p>
   </main>
 
-  <!-- সব JS ফাইল -->
+  <!-- JS files -->
   <script src="main.js"></script>
   <script src="monthday.js"></script>
   <script src="transactionfrom.js"></script>
@@ -127,7 +118,7 @@
   <script src="dashboard.js"></script>
   <script src="proflie.js"></script>
 
-  <!-- মোবাইল মেনু + Auto User Name + Theme Init -->
+  <!-- 🔧 inline script — শুধু UI (auth listener বাদ দেওয়া) -->
   <script>
     document.addEventListener('DOMContentLoaded', () => {
       const menuToggle  = document.getElementById('menu-toggle');
@@ -136,9 +127,6 @@
       const menuButtons = document.querySelectorAll('.menu-button');
       const mobileTitle = document.querySelector('.mobile-title');
       const content     = document.getElementById('content');
-      const userNameEl  = document.getElementById('user-name');
-
-      const APP_NAME = 'আয়-ব্যয় ব্যবস্থাপনা';
 
       const sectionTitles = {
         'nav-dashboard': 'ড্যাশবোর্ড',
@@ -175,70 +163,26 @@
         };
         syncTitle();
         try {
-          new MutationObserver(syncTitle).observe(content, { childList: true, subtree: false });
+          new MutationObserver(syncTitle).observe(content, { childList: true, subtree: true });
         } catch (e) {
           console.warn('MutationObserver failed:', e);
         }
       }
 
-      // 🔥 ইউজারের নাম লোড করা
-      if (typeof firebase !== 'undefined' && firebase.auth) {
-        firebase.auth().onAuthStateChanged(async (user) => {
-          if (!user) return;
-
-          let displayName = user.displayName;
-
-          if (!displayName) {
-            try {
-              const doc = await firebase.firestore().collection('users').doc(user.uid).get();
-              if (doc.exists) {
-                const data = doc.data() || {};
-                displayName = data.name || data.displayName || data.fullName || data.userName || '';
-              }
-            } catch (err) {
-              console.warn('Profile name load failed:', err);
-            }
-          }
-
-          if (!displayName && user.email) {
-            displayName = user.email.split('@')[0];
-          }
-
-          if (!displayName) displayName = 'ব্যবহারকারী';
-
-          // মোবাইল টপবারে নাম
-          if (mobileTitle &&
-              (mobileTitle.textContent === 'লোড হচ্ছে...' || mobileTitle.textContent === '')) {
-            mobileTitle.textContent = displayName;
-          }
-
-          // 🆕 প্রোফাইল কার্ডে নাম ও আইকন বসানো (হাইট সমান করার জন্য)
-          if (userNameEl) {
-            userNameEl.innerHTML = `
-              <i class="fas fa-user-circle" style="font-size: 2.2rem; color: var(--primary);"></i>
-              <div class="profile-name-row">
-                <strong>${displayName}</strong>
-                <i class="fas fa-sign-in-alt"></i>
-              </div>
-            `;
-          }
-        });
-      }
-
-      // থিম লজিক
+      // Theme logic
       const themeToggle = document.getElementById('theme-toggle');
       const themeLabel  = document.getElementById('theme-label');
+      const themeMeta   = document.getElementById('theme-color-meta');
 
       if (themeToggle && document.body) {
         let savedTheme = 'default';
-        try {
-          savedTheme = localStorage.getItem('appTheme') || 'default';
-        } catch (e) { }
+        try { savedTheme = localStorage.getItem('appTheme') || 'default'; } catch (e) { }
 
         if (savedTheme === 'dark') {
           document.body.classList.add('dark-theme');
           themeToggle.checked = true;
           if (themeLabel) themeLabel.textContent = 'ডার্ক থিম';
+          if (themeMeta) themeMeta.content = '#0f172a';
         }
 
         themeToggle.addEventListener('change', (e) => {
@@ -246,27 +190,24 @@
             document.body.classList.add('dark-theme');
             try { localStorage.setItem('appTheme', 'dark'); } catch (err) {}
             if (themeLabel) themeLabel.textContent = 'ডার্ক থিম';
+            if (themeMeta) themeMeta.content = '#0f172a';
           } else {
             document.body.classList.remove('dark-theme');
             try { localStorage.setItem('appTheme', 'default'); } catch (err) {}
             if (themeLabel) themeLabel.textContent = 'ডিফল্ট থিম';
+            if (themeMeta) themeMeta.content = '#3b82f6';
           }
         });
       }
     });
   </script>
 
-  <!-- PWA Service Worker -->
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('./sw.js')
-          .then(registration => {
-            console.log('Service Worker registered:', registration.scope);
-          })
-          .catch(error => {
-            console.log('Service Worker registration failed:', error);
-          });
+          .then(reg => console.log('SW registered:', reg.scope))
+          .catch(err => console.log('SW registration failed:', err));
       });
     }
   </script>
